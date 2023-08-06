@@ -7,7 +7,11 @@
     <title>MP3s</title>
     <style>
         tr.playing {
-            background: #e0e0e0;
+            background: lightblue;
+        }
+
+        .pagecontrols {
+            text-align: right;
         }
     </style>
 </head>
@@ -17,6 +21,7 @@
         <div class="grid">
             <select id="collection" required>
                 <option value="music_reorganized" selected>Music Reorganized</option>
+                <option value="josh_high_school">Josh High School</option>
             </select>
             <select id="index" required>
                 <option value="artist" selected>Artist</option>
@@ -34,18 +39,17 @@
             <th scope="col">Album</th>
             <th scope="col">Title</th>
             <th scope="col">Track</th>
-            <th scope="col">Ctrl</th>
+            <th class="pagecontrols" scope="col">Ctrl</th>
         </tr>
         </thead>
         <tbody id="mp3s">
         </tbody>
         <tfoot>
         <tr>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td><a id="nextpage" href="#">Next</a></td>
+            <td class="pagecontrols" colspan="5">
+                <a id="resetpage" href="#">Reset</a> |
+                <a id="nextpage" href="#">Next</a>
+            </td>
         </tr>
         </tfoot>
     </table>
@@ -56,11 +60,19 @@
             <th scope="col">Album</th>
             <th scope="col">Title</th>
             <th scope="col">Track</th>
-            <th scope="col">Ctrl</th>
+            <th class="pagecontrols" scope="col">Ctrl</th>
         </tr>
         </thead>
         <tbody id="playlist">
         </tbody>
+        <tfoot>
+        <tr>
+            <td class="pagecontrols" colspan="5">
+                <a id="playprev" href="#">Prev</a> |
+                <a id="playnext" href="#">Next</a>
+            </td>
+        </tr>
+        </tfoot>
     </table>
     <audio id="player" controls>
     </audio>
@@ -72,7 +84,10 @@
     const searchInput = document.getElementById('search');
     const collectionSelect = document.getElementById('collection');
     const indexSelect = document.getElementById('index');
+    const resetLink = document.getElementById('resetpage');
     const nextLink = document.getElementById('nextpage');
+    const playPrevLink = document.getElementById('playprev');
+    const playNextLink = document.getElementById('playnext');
     const mp3sTbody = document.getElementById('mp3s');
     const playlistTbody = document.getElementById('playlist');
     const player = document.getElementById('player');
@@ -139,11 +154,11 @@
         const row = playlistTbody.insertRow();
         row.innerHTML = `
         <tr>
-            <td>${mp3.artist}</td>
-            <td>${mp3.album}</td>
-            <td>${mp3.title}</td>
-            <td>${mp3.track}</td>
-            <td>
+            <td>${mp3.artist ? mp3.artist : ''}</td>
+            <td>${mp3.album ? mp3.album : ''}</td>
+            <td>${mp3.title ? mp3.title : ''}</td>
+            <td>${mp3.track ? mp3.track : ''}</td>
+            <td class="pagecontrols">
                 <a class="moveup" href="#">Up</a> |
                 <a class="movedown" href="#">Down</a> |
                 <a class="del" href="#">Del</a> |
@@ -184,11 +199,11 @@
         const row = mp3sTbody.insertRow();
         row.innerHTML = `
         <tr>
-            <td>${mp3.artist}</td>
-            <td>${mp3.album}</td>
-            <td>${mp3.title}</td>
-            <td>${mp3.track}</td>
-            <td><a class="addmp3" href="#">Add</a></td>
+            <td>${mp3.artist ? mp3.artist : ''}</td>
+            <td>${mp3.album ? mp3.album : ''}</td>
+            <td>${mp3.title ? mp3.title : ''}</td>
+            <td>${mp3.track ? mp3.track : ''}</td>
+            <td class="pagecontrols"><a class="addmp3" href="#">Add</a></td>
         </tr>`;
         row.querySelector('a.addmp3').addEventListener('click', function (event) {
             event.preventDefault();
@@ -246,6 +261,11 @@
         queryAndUpdate();
     });
 
+    resetLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, '', onLoad);
+    });
+
     nextLink.addEventListener('click', function (event) {
         event.preventDefault();
         if (pageToken) {
@@ -253,14 +273,32 @@
         }
     });
 
-    player.addEventListener('ended', function (event) {
-        playingOrder++;
-        if (playingOrder < playlist.length) {
-            const mp3 = playlist[playingOrder];
-            player.src = `${host}/${mp3.s3_key}`
-            player.play();
-        }
+    function syncPlayer() {
+        const mp3 = playlist[playingOrder];
+        player.src = `${host}/${mp3.s3_key}`
+        player.play();
         syncPlaylistTable();
+    }
+
+    player.addEventListener('ended', function (event) {
+        playingOrder = (playingOrder + 1) % playlist.length;
+        syncPlayer();
+    });
+
+    playPrevLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        if (playlist.length) {
+            playingOrder = playingOrder === 0 ? playlist.length - 1 : playingOrder - 1;
+            syncPlayer();
+        }
+    });
+
+    playNextLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        if (playlist.length) {
+            playingOrder = (playingOrder + 1) % playlist.length;
+            syncPlayer();
+        }
     });
 
     queryAndUpdate('');

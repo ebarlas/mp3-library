@@ -42,11 +42,23 @@ def merge_terms(ts):
 
 
 def make_item(audio_file, collection_name, s3_key, file_path, file_name):
+    has_tag = hasattr(audio_file, 'tag')
     term_filename = make_term(file_name)
-    term_artist = make_term(audio_file.tag.artist) if audio_file.tag.artist else None
-    term_album = make_term(audio_file.tag.album) if audio_file.tag.album else None
-    term_title = make_term(audio_file.tag.title) if audio_file.tag.title else None
-    track = str(audio_file.tag.track_num[0]) if audio_file.tag.track_num and audio_file.tag.track_num[0] else None
+    term_artist = make_term(audio_file.tag.artist) \
+        if has_tag and hasattr(audio_file.tag, 'artist') and audio_file.tag.artist \
+        else None
+    term_album = make_term(audio_file.tag.album) \
+        if has_tag and hasattr(audio_file.tag, 'album') and audio_file.tag.album \
+        else None
+    term_title = make_term(audio_file.tag.title) \
+        if has_tag and hasattr(audio_file.tag, 'title') and audio_file.tag.title \
+        else None
+    track = str(audio_file.tag.track_num[0]) \
+        if (has_tag
+            and hasattr(audio_file.tag, 'track_num')
+            and audio_file.tag.track_num
+            and audio_file.tag.track_num[0]) \
+        else None
     padded_track = (track if len(track) == 2 else ('0' + track)) if track else None
     terms_artist = merge_terms([term_artist, term_album, padded_track])
     terms_album = merge_terms([term_album, term_artist, padded_track])
@@ -72,7 +84,7 @@ def make_item(audio_file, collection_name, s3_key, file_path, file_name):
         item |= {'artist': {'S': audio_file.tag.artist}, 'term_artist': {'S': terms_artist}}
     if term_album:
         item |= {'album': {'S': audio_file.tag.album}, 'term_album': {'S': terms_album}}
-    if audio_file.tag.title:
+    if term_title:
         item |= {'title': {'S': audio_file.tag.title}, 'term_title': {'S': terms_title}}
     if track:
         item |= {'track': {'N': track}}
@@ -120,8 +132,8 @@ def check_response(res):
 def upload(dynamo, s3, collection, root, files, offset):
     for n, (top, f) in enumerate(files):
         rel_top = top.replace(root, '')
-        path = f'{top}/{f}'
-        rel_path = f'{rel_top}/{f}'
+        path = f'{top}{f}' if top.endswith('/') else f'{top}/{f}'
+        rel_path = f'{rel_top}/{f}' if rel_top else f
         audio_file = eyed3.load(path)
         print(f'[{n + offset}] {path}')
         s3_key = make_s3_key(f'{S3_FOLDER}/{collection}/{rel_path}')
