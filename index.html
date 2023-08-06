@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="pico.min.css">
+    <title>MP3s</title>
+    <style>
+        tr.playing {
+            background: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+<main class="container-fluid">
+    <form>
+        <div class="grid">
+            <select id="collection" required>
+                <option value="music_reorganized" selected>Music Reorganized</option>
+            </select>
+            <select id="index" required>
+                <option value="artist" selected>Artist</option>
+                <option value="album">Album</option>
+                <option value="title">Title</option>
+                <option value="filename">File</option>
+            </select>
+        </div>
+        <input type="search" id="search" name="search" placeholder="Search">
+    </form>
+    <table>
+        <thead>
+        <tr>
+            <th scope="col">Artist</th>
+            <th scope="col">Album</th>
+            <th scope="col">Title</th>
+            <th scope="col">Track</th>
+            <th scope="col">Ctrl</th>
+        </tr>
+        </thead>
+        <tbody id="mp3s">
+        </tbody>
+        <tfoot>
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td><a id="nextpage" href="#">Next</a></td>
+        </tr>
+        </tfoot>
+    </table>
+    <table>
+        <thead>
+        <tr>
+            <th scope="col">Artist</th>
+            <th scope="col">Album</th>
+            <th scope="col">Title</th>
+            <th scope="col">Track</th>
+            <th scope="col">Ctrl</th>
+        </tr>
+        </thead>
+        <tbody id="playlist">
+        </tbody>
+    </table>
+    <audio id="player" controls>
+    </audio>
+</main>
+</body>
+<script>
+    const host = "https://www.barlasgarden.com";
+
+    const searchInput = document.getElementById('search');
+    const collectionSelect = document.getElementById('collection');
+    const indexSelect = document.getElementById('index');
+    const nextLink = document.getElementById('nextpage');
+    const mp3sTbody = document.getElementById('mp3s');
+    const playlistTbody = document.getElementById('playlist');
+    const player = document.getElementById('player');
+
+    const playlist = []
+    let playingOrder;
+    let lastQuery = ''
+    let pageToken = ''
+
+    function syncPlaylistTable() {
+        removeAllRows(playlistTbody);
+        playlist.forEach((mp3, index) => {
+            addPlaylistRow(mp3, index);
+        });
+    }
+
+    function removePlayingClass() {
+        const e = document.querySelector("tr.playing")
+        if (e) {
+            e.classList.remove('playing');
+        }
+    }
+
+    function swapLeft(arr, index) {
+        [arr[index - 1], arr[index]] = [arr[index], arr[index - 1]];
+    }
+
+    function swapRight(arr, index) {
+        [arr[index + 1], arr[index]] = [arr[index], arr[index + 1]];
+    }
+
+    function moveUp(order) {
+        if (order > 0) {
+            swapLeft(playlist, order);
+            if (order === playingOrder) {
+                playingOrder--;
+            }
+        }
+        syncPlaylistTable();
+    }
+
+    function moveDown(order) {
+        if (order < playlist.length - 1) {
+            swapRight(playlist, order);
+            if (order === playingOrder) {
+                playingOrder++;
+            }
+        }
+        syncPlaylistTable();
+    }
+
+    function moveOut(order) {
+        if (order === playingOrder) {
+            player.pause();
+            player.src = '';
+            playingOrder = -1;
+        }
+        playlist.splice(order, 1);
+        syncPlaylistTable();
+    }
+
+    function addPlaylistRow(mp3, order) {
+        const playing = order === playingOrder;
+        const row = playlistTbody.insertRow();
+        row.innerHTML = `
+        <tr>
+            <td>${mp3.artist}</td>
+            <td>${mp3.album}</td>
+            <td>${mp3.title}</td>
+            <td>${mp3.track}</td>
+            <td>
+                <a class="moveup" href="#">Up</a> |
+                <a class="movedown" href="#">Down</a> |
+                <a class="del" href="#">Del</a> |
+                <a class="play" href="#">Play</a>
+            </td>
+        </tr>`;
+        if (playing) {
+            row.classList.add('playing');
+        }
+        row.querySelector('a.moveup').addEventListener('click', function (event) {
+            event.preventDefault();
+            moveUp(order);
+        });
+        row.querySelector('a.movedown').addEventListener('click', function (event) {
+            event.preventDefault();
+            moveDown(order);
+        });
+        row.querySelector('a.del').addEventListener('click', function (event) {
+            event.preventDefault();
+            moveOut(order);
+        });
+        row.querySelector('a.play').addEventListener('click', function (event) {
+            event.preventDefault();
+            playingOrder = order;
+            player.src = `${host}/${mp3.s3_key}`
+            player.play();
+            removePlayingClass();
+            row.classList.add('playing');
+        });
+    }
+
+    function addToPlaylist(mp3) {
+        playlist.push(mp3);
+        addPlaylistRow(mp3, playlist.length - 1)
+    }
+
+    function addMp3Row(mp3) {
+        const row = mp3sTbody.insertRow();
+        row.innerHTML = `
+        <tr>
+            <td>${mp3.artist}</td>
+            <td>${mp3.album}</td>
+            <td>${mp3.title}</td>
+            <td>${mp3.track}</td>
+            <td><a class="addmp3" href="#">Add</a></td>
+        </tr>`;
+        row.querySelector('a.addmp3').addEventListener('click', function (event) {
+            event.preventDefault();
+            addToPlaylist(mp3);
+        });
+    }
+
+    function addMp3s(mp3s) {
+        mp3s.forEach((mp3, index) => {
+            addMp3Row(mp3)
+        });
+    }
+
+    function removeAllRows(tbody) {
+        while (tbody.firstChild) {
+            tbody.removeChild(tbody.firstChild);
+        }
+    }
+
+    function loadMp3s(collection, index, query, token, fn) {
+        const res = `${host}/songs?collection=${collection}&index=${index}&q=${query}&limit=10&token=${token}`
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', res, true);
+        xhr.onload = function (e) {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+                fn(JSON.parse(xhr.responseText));
+            }
+        };
+        xhr.send(null);
+    }
+
+    function onLoad(res) {
+        pageToken = res.token;
+        removeAllRows(mp3sTbody);
+        addMp3s(res.items)
+    }
+
+    function queryAndUpdate() {
+        query = `${collectionSelect.value}/${indexSelect.value}/${searchInput.value}`;
+        if (query !== lastQuery) {
+            lastQuery = query;
+            loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, '', onLoad);
+        }
+    }
+
+    collectionSelect.addEventListener('change', function (event) {
+        queryAndUpdate();
+    });
+
+    indexSelect.addEventListener('change', function (event) {
+        queryAndUpdate();
+    });
+
+    searchInput.addEventListener('keyup', function (event) {
+        queryAndUpdate();
+    });
+
+    nextLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        if (pageToken) {
+            loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, pageToken, onLoad);
+        }
+    });
+
+    player.addEventListener('ended', function (event) {
+        playingOrder++;
+        if (playingOrder < playlist.length) {
+            const mp3 = playlist[playingOrder];
+            player.src = `${host}/${mp3.s3_key}`
+            player.play();
+        }
+        syncPlaylistTable();
+    });
+
+    queryAndUpdate('');
+</script>
+</html>
