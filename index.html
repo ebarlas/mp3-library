@@ -95,6 +95,7 @@
         <tfoot>
         <tr>
             <td class="pagecontrols" colspan="5">
+                <a id="clearlist" href="#">Clear</a> |
                 <a id="playprev" href="#">Prev</a> |
                 <a id="playnext" href="#">Next</a>
             </td>
@@ -116,6 +117,7 @@
     const nextLink = document.getElementById('nextpage');
     const playPrevLink = document.getElementById('playprev');
     const playNextLink = document.getElementById('playnext');
+    const clearListLink = document.getElementById('clearlist');
     const mp3sTbody = document.getElementById('mp3s');
     const playlistTbody = document.getElementById('playlist');
     const chkArtist = document.getElementById('chkartist');
@@ -182,11 +184,15 @@
         syncPlaylistTable();
     }
 
+    function stopPlayer() {
+        player.pause();
+        player.src = '';
+        playingOrder = -1;
+    }
+
     function moveOut(order) {
         if (order === playingOrder) {
-            player.pause();
-            player.src = '';
-            playingOrder = -1;
+            stopPlayer();
         }
         playlist.splice(order, 1);
         syncPlaylistTable();
@@ -367,6 +373,15 @@
         if (playlist.length) {
             playingOrder = (playingOrder + 1) % playlist.length;
             syncPlayer();
+        }
+    });
+
+    clearListLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        if (playlist.length) {
+            playlist.length = 0;
+            stopPlayer();
+            syncPlaylistTable();
         }
     });
 
