@@ -73,6 +73,7 @@
         <tr>
             <td class="pagecontrols" colspan="5">
                 <a id="resetpage" href="#">Reset</a> |
+                <a id="prevpage" href="#">Prev</a> |
                 <a id="nextpage" href="#">Next</a>
             </td>
         </tr>
@@ -111,6 +112,7 @@
     const collectionSelect = document.getElementById('collection');
     const indexSelect = document.getElementById('index');
     const resetLink = document.getElementById('resetpage');
+    const prevLink = document.getElementById('prevpage');
     const nextLink = document.getElementById('nextpage');
     const playPrevLink = document.getElementById('playprev');
     const playNextLink = document.getElementById('playnext');
@@ -127,6 +129,7 @@
     let playingOrder;
     let lastQuery = ''
     let pageToken = ''
+    let prevPageTokens = ['']
 
     const chks = {
         artist: chkArtist,
@@ -300,6 +303,7 @@
         query = `${collectionSelect.value}/${indexSelect.value}/${searchInput.value}`;
         if (query !== lastQuery) {
             lastQuery = query;
+            prevPageTokens = ['']
             loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, '', onLoad);
         }
     }
@@ -318,12 +322,22 @@
 
     resetLink.addEventListener('click', function (event) {
         event.preventDefault();
+        prevPageTokens = ['']
         loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, '', onLoad);
+    });
+
+    prevLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        if (prevPageTokens.length > 1) {
+            prevPageTokens.pop();
+        }
+        loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, prevPageTokens[prevPageTokens.length - 1], onLoad);
     });
 
     nextLink.addEventListener('click', function (event) {
         event.preventDefault();
         if (pageToken) {
+            prevPageTokens.push(pageToken)
             loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, pageToken, onLoad);
         }
     });
