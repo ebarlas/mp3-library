@@ -13,6 +13,10 @@
         .pagecontrols {
             text-align: right;
         }
+
+        .hide {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -20,7 +24,7 @@
     <form>
         <div class="grid">
             <select id="collection" required>
-                <option value="music_reorganized" selected>Music Reorganized</option>
+                <option value="music_reorganized" selected>Freshman Compilation</option>
                 <option value="josh_high_school">Josh High School</option>
             </select>
             <select id="index" required>
@@ -31,14 +35,35 @@
             </select>
         </div>
         <input type="search" id="search" name="search" placeholder="Search">
+        <label for="chkartist">
+            <input type="checkbox" id="chkartist" name="artist" checked>
+            Artist
+        </label>
+        <label for="chkalbum">
+            <input type="checkbox" id="chkalbum" name="album" checked>
+            Album
+        </label>
+        <label for="chktitle">
+            <input type="checkbox" id="chktitle" name="title" checked>
+            Title
+        </label>
+        <label for="chktrack">
+            <input type="checkbox" id="chktrack" name="track" checked>
+            Track
+        </label>
+        <label for="chkfilename">
+            <input type="checkbox" id="chkfilename" name="filename">
+            Filenames
+        </label>
     </form>
     <table>
         <thead>
         <tr>
-            <th scope="col">Artist</th>
-            <th scope="col">Album</th>
-            <th scope="col">Title</th>
-            <th scope="col">Track</th>
+            <th class="artist" scope="col">Artist</th>
+            <th class="album" scope="col">Album</th>
+            <th class="title" scope="col">Title</th>
+            <th class="track" scope="col">Track</th>
+            <th class="filename" scope="col">File</th>
             <th class="pagecontrols" scope="col">Ctrl</th>
         </tr>
         </thead>
@@ -56,10 +81,11 @@
     <table>
         <thead>
         <tr>
-            <th scope="col">Artist</th>
-            <th scope="col">Album</th>
-            <th scope="col">Title</th>
-            <th scope="col">Track</th>
+            <th class="artist" scope="col">Artist</th>
+            <th class="album" scope="col">Album</th>
+            <th class="title" scope="col">Title</th>
+            <th class="track" scope="col">Track</th>
+            <th class="filename" scope="col">File</th>
             <th class="pagecontrols" scope="col">Ctrl</th>
         </tr>
         </thead>
@@ -90,6 +116,11 @@
     const playNextLink = document.getElementById('playnext');
     const mp3sTbody = document.getElementById('mp3s');
     const playlistTbody = document.getElementById('playlist');
+    const chkArtist = document.getElementById('chkartist');
+    const chkAlbum = document.getElementById('chkalbum');
+    const chkTitle = document.getElementById('chktitle');
+    const chkTrack = document.getElementById('chktrack');
+    const chkFilename = document.getElementById('chkfilename');
     const player = document.getElementById('player');
 
     const playlist = []
@@ -97,11 +128,20 @@
     let lastQuery = ''
     let pageToken = ''
 
+    const chks = {
+        artist: chkArtist,
+        album: chkAlbum,
+        title: chkTitle,
+        track: chkTrack,
+        filename: chkFilename
+    }
+
     function syncPlaylistTable() {
         removeAllRows(playlistTbody);
         playlist.forEach((mp3, index) => {
             addPlaylistRow(mp3, index);
         });
+        showHideColumns();
     }
 
     function removePlayingClass() {
@@ -154,10 +194,11 @@
         const row = playlistTbody.insertRow();
         row.innerHTML = `
         <tr>
-            <td>${mp3.artist ? mp3.artist : ''}</td>
-            <td>${mp3.album ? mp3.album : ''}</td>
-            <td>${mp3.title ? mp3.title : ''}</td>
-            <td>${mp3.track ? mp3.track : ''}</td>
+            <td class="artist">${mp3.artist ? mp3.artist : ''}</td>
+            <td class="album">${mp3.album ? mp3.album : ''}</td>
+            <td class="title">${mp3.title ? mp3.title : ''}</td>
+            <td class="track">${mp3.track ? mp3.track : ''}</td>
+            <td class="filename">${mp3.filename ? mp3.filename : ''}</td>
             <td class="pagecontrols">
                 <a class="moveup" href="#">Up</a> |
                 <a class="movedown" href="#">Down</a> |
@@ -193,16 +234,29 @@
     function addToPlaylist(mp3) {
         playlist.push(mp3);
         addPlaylistRow(mp3, playlist.length - 1)
+        showHideColumns();
+    }
+
+    function showHideColumns() {
+        Object.entries(chks).forEach(function ([key, value]) {
+            const elems = document.querySelectorAll(`.${key}`);
+            if (value.checked) {
+                elems.forEach(e => e.classList.remove('hide'));
+            } else {
+                elems.forEach(e => e.classList.add('hide'));
+            }
+        });
     }
 
     function addMp3Row(mp3) {
         const row = mp3sTbody.insertRow();
         row.innerHTML = `
         <tr>
-            <td>${mp3.artist ? mp3.artist : ''}</td>
-            <td>${mp3.album ? mp3.album : ''}</td>
-            <td>${mp3.title ? mp3.title : ''}</td>
-            <td>${mp3.track ? mp3.track : ''}</td>
+            <td class="artist">${mp3.artist ? mp3.artist : ''}</td>
+            <td class="album">${mp3.album ? mp3.album : ''}</td>
+            <td class="title">${mp3.title ? mp3.title : ''}</td>
+            <td class="track">${mp3.track ? mp3.track : ''}</td>
+            <td class="filename">${mp3.filename ? mp3.filename : ''}</td>
             <td class="pagecontrols"><a class="addmp3" href="#">Add</a></td>
         </tr>`;
         row.querySelector('a.addmp3').addEventListener('click', function (event) {
@@ -215,6 +269,7 @@
         mp3s.forEach((mp3, index) => {
             addMp3Row(mp3)
         });
+        showHideColumns();
     }
 
     function removeAllRows(tbody) {
@@ -299,6 +354,12 @@
             playingOrder = (playingOrder + 1) % playlist.length;
             syncPlayer();
         }
+    });
+
+    Object.values(chks).forEach((elem) => {
+        elem.addEventListener('change', function () {
+            showHideColumns();
+        });
     });
 
     queryAndUpdate('');
