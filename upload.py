@@ -61,7 +61,7 @@ def make_item(audio_file, collection_name, s3_key, file_path, file_name):
         else None
     padded_track = (track if len(track) == 2 else ('0' + track)) if track else None
     terms_artist = merge_terms([term_artist, term_album, padded_track])
-    terms_album = merge_terms([term_album, term_artist, padded_track])
+    terms_album = merge_terms([term_album, padded_track, term_artist])
     terms_title = merge_terms([term_title, term_artist, term_album])
     item = {
         'collection': {
