@@ -24,7 +24,8 @@
     <form>
         <div class="grid">
             <select id="collection" required>
-                <option value="music_reorganized" selected>Freshman Compilation</option>
+                <option value="music_reorganized" selected>Freshman Compilation 2003</option>
+                <option value="itunes_music">ITunes Music 2009</option>
                 <option value="josh_high_school">Josh High School</option>
             </select>
             <select id="index" required>
@@ -72,6 +73,7 @@
         <tfoot>
         <tr>
             <td class="pagecontrols" colspan="5">
+                <a id="addpage" href="#">Add All</a> |
                 <a id="resetpage" href="#">Reset</a> |
                 <a id="prevpage" href="#">Prev</a> |
                 <a id="nextpage" href="#">Next</a>
@@ -113,6 +115,7 @@
     const collectionSelect = document.getElementById('collection');
     const indexSelect = document.getElementById('index');
     const resetLink = document.getElementById('resetpage');
+    const addPageLink = document.getElementById('addpage');
     const prevLink = document.getElementById('prevpage');
     const nextLink = document.getElementById('nextpage');
     const playPrevLink = document.getElementById('playprev');
@@ -130,6 +133,7 @@
     const playlist = []
     let playingOrder;
     let lastQuery = ''
+    let pageMp3s;
     let pageToken = ''
     let prevPageTokens = ['']
 
@@ -300,6 +304,7 @@
     }
 
     function onLoad(res) {
+        pageMp3s = res.items;
         pageToken = res.token;
         removeAllRows(mp3sTbody);
         addMp3s(res.items)
@@ -324,6 +329,15 @@
 
     searchInput.addEventListener('keyup', function (event) {
         queryAndUpdate();
+    });
+
+    addPageLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        if (pageMp3s) {
+            pageMp3s.forEach((mp3) => {
+                addToPlaylist(mp3);
+            });
+        }
     });
 
     resetLink.addEventListener('click', function (event) {
