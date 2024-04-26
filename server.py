@@ -1,4 +1,5 @@
 import json
+import random
 import urllib.parse
 import base64
 
@@ -8,8 +9,36 @@ client = boto3.client('dynamodb', region_name='us-west-2')
 
 table = 'mp3s'
 
+VOWELS = 'aeiou'
+CONSONANTS = 'bcdfghjklmnpqrstvwxyz'
 
-def query(collection, field, value, limit, start_key):
+
+def generate_word_stem(length):
+    return ''.join(random.choice(CONSONANTS if i % 2 == 0 else VOWELS) for i in range(length))
+
+
+def query_after(collection, field, forward, term, limit):
+    params = {
+        'TableName': table,
+        'IndexName': f'{field}-index',
+        'Limit': limit,
+        'ScanIndexForward': forward,
+        'KeyConditionExpression': f'#collection = :collection and #{field} {">=" if forward else "<="} :{field}',
+        'ExpressionAttributeNames': {'#collection': 'collection', f'#{field}': f'term_{field}'},
+        'ExpressionAttributeValues': {':collection': {'S': collection}, f':{field}': {'S': term}}
+    }
+    res = client.query(**params)
+    return res['Items']
+
+
+def random_songs(collection, limit):
+    term = generate_word_stem(3)
+    forward = random.choice([True, False])
+    items = query_after(collection, 'title', forward, term, 200)
+    return random.sample(items, min(limit, len(items)))
+
+
+def query_page(collection, field, value, limit, start_key):
     kce = '#collection = :collection'
     ean = {'#collection': 'collection'}
     eav = {':collection': {'S': collection}}
@@ -111,6 +140,14 @@ def lambda_handler(event, context):
     q = '?' + request['querystring'] if 'querystring' in request else ''
     print(f'method={request["method"]}, path={request["uri"]}{q}')
 
+    if request['method'] == 'GET' and '/random' in request['uri']:
+        collection = extract_param(request, 'collection')
+        plimit = extract_param(request, 'limit')
+        limit = int(plimit) if plimit else 100
+        if not collection:
+            return {'status': '400', 'statusDescription': 'Bad Request'}
+        items = random_songs(collection, limit)
+        return to_response(items, None)
     if request['method'] == 'GET' and '/songs' in request['uri']:
         collection = extract_param(request, 'collection')
         index = extract_param(request, 'index')
@@ -121,7 +158,7 @@ def lambda_handler(event, context):
         start_key = extract_token(token) if token else None
         if not collection or not index:
             return {'status': '400', 'statusDescription': 'Bad Request'}
-        items, token = query(collection, index, q, limit, start_key)
+        items, token = query_page(collection, index, q, limit, start_key)
         return to_response(items, token)
 
     return {

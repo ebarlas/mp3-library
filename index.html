@@ -97,6 +97,7 @@
         <tfoot>
         <tr>
             <td class="pagecontrols" colspan="5">
+                <a id="random" href="#">Random</a> |
                 <a id="clearlist" href="#">Clear</a> |
                 <a id="playprev" href="#">Prev</a> |
                 <a id="playnext" href="#">Next</a>
@@ -121,6 +122,7 @@
     const playPrevLink = document.getElementById('playprev');
     const playNextLink = document.getElementById('playnext');
     const clearListLink = document.getElementById('clearlist');
+    const randomLink = document.getElementById('random');
     const mp3sTbody = document.getElementById('mp3s');
     const playlistTbody = document.getElementById('playlist');
     const chkArtist = document.getElementById('chkartist');
@@ -130,12 +132,12 @@
     const chkFilename = document.getElementById('chkfilename');
     const player = document.getElementById('player');
 
-    const playlist = []
+    const playlist = [];
     let playingOrder;
-    let lastQuery = ''
+    let lastQuery = '';
     let pageMp3s;
-    let pageToken = ''
-    let prevPageTokens = ['']
+    let pageToken = '';
+    let prevPageTokens = [''];
 
     const chks = {
         artist: chkArtist,
@@ -143,7 +145,7 @@
         title: chkTitle,
         track: chkTrack,
         filename: chkFilename
-    }
+    };
 
     function syncPlaylistTable() {
         removeAllRows(playlistTbody);
@@ -154,7 +156,7 @@
     }
 
     function removePlayingClass() {
-        const e = document.querySelector("tr.playing")
+        const e = document.querySelector("tr.playing");
         if (e) {
             e.classList.remove('playing');
         }
@@ -292,7 +294,19 @@
     }
 
     function loadMp3s(collection, index, query, token, fn) {
-        const res = `${host}/songs?collection=${collection}&index=${index}&q=${query}&limit=10&token=${token}`
+        const res = `${host}/songs?collection=${collection}&index=${index}&q=${query}&limit=25&token=${token}`
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', res, true);
+        xhr.onload = function (e) {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+                fn(JSON.parse(xhr.responseText));
+            }
+        };
+        xhr.send(null);
+    }
+
+    function loadRandomMp3s(collection, fn) {
+        const res = `${host}/songs/random?collection=${collection}&limit=25`
         const xhr = new XMLHttpRequest();
         xhr.open('GET', res, true);
         xhr.onload = function (e) {
@@ -390,14 +404,28 @@
         }
     });
 
-    clearListLink.addEventListener('click', function (event) {
-        event.preventDefault();
+    function clearPlaylist() {
         if (playlist.length) {
             playlist.length = 0;
             stopPlayer();
             syncPlaylistTable();
         }
+    }
+
+    clearListLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        clearPlaylist();
     });
+
+    randomLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        clearPlaylist();
+        loadRandomMp3s(collectionSelect.value, function (res) {
+            res.items.forEach((mp3, index) => {
+                addToPlaylist(mp3);
+            });
+        })
+    })
 
     Object.values(chks).forEach((elem) => {
         elem.addEventListener('change', function () {
