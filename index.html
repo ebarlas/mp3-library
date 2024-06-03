@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="pico.min.css">
-    <title>MP3s</title>
+    <title>Songs</title>
     <style>
         tr.playing {
             background: lightblue;
@@ -24,8 +24,8 @@
     <form>
         <div class="grid">
             <select id="collection" required>
-                <option value="music_reorganized" selected>Freshman Compilation 2003</option>
-                <option value="itunes_music">ITunes Music 2009</option>
+                <option value="music_reorganized">Freshman Compilation 2003</option>
+                <option value="itunes_music" selected>ITunes Music 2009</option>
                 <option value="josh_high_school">Josh High School</option>
             </select>
             <select id="index" required>
@@ -68,7 +68,7 @@
             <th class="pagecontrols" scope="col">Ctrl</th>
         </tr>
         </thead>
-        <tbody id="mp3s">
+        <tbody id="catalog">
         </tbody>
         <tfoot>
         <tr>
@@ -123,7 +123,7 @@
     const playNextLink = document.getElementById('playnext');
     const clearListLink = document.getElementById('clearlist');
     const randomLink = document.getElementById('random');
-    const mp3sTbody = document.getElementById('mp3s');
+    const catalogTbody = document.getElementById('catalog');
     const playlistTbody = document.getElementById('playlist');
     const chkArtist = document.getElementById('chkartist');
     const chkAlbum = document.getElementById('chkalbum');
@@ -135,7 +135,7 @@
     const playlist = [];
     let playingOrder;
     let lastQuery = '';
-    let pageMp3s;
+    let pageCatalog;
     let pageToken = '';
     let prevPageTokens = [''];
 
@@ -149,9 +149,7 @@
 
     function syncPlaylistTable() {
         removeAllRows(playlistTbody);
-        playlist.forEach((mp3, index) => {
-            addPlaylistRow(mp3, index);
-        });
+        playlist.forEach(addPlaylistRow);
         showHideColumns();
     }
 
@@ -204,16 +202,17 @@
         syncPlaylistTable();
     }
 
-    function addPlaylistRow(mp3, order) {
-        const playing = order === playingOrder;
+    function addPlaylistRow(song) {
         const row = playlistTbody.insertRow();
+        const order = row.rowIndex - 1;
+        const playing = order === playingOrder;
         row.innerHTML = `
         <tr>
-            <td class="artist">${mp3.artist ? mp3.artist : ''}</td>
-            <td class="album">${mp3.album ? mp3.album : ''}</td>
-            <td class="title">${mp3.title ? mp3.title : ''}</td>
-            <td class="track">${mp3.track ? mp3.track : ''}</td>
-            <td class="filename">${mp3.filename ? mp3.filename : ''}</td>
+            <td class="artist"><a class="search_artist">${song.artist ? song.artist : ''}</a></td>
+            <td class="album"><a class="search_album">${song.album ? song.album : ''}</a></td>
+            <td class="title"><a class="search_title">${song.title ? song.title : ''}</a></td>
+            <td class="track">${song.track ? song.track : ''}</td>
+            <td class="filename">${song.filename ? song.filename : ''}</td>
             <td class="pagecontrols">
                 <a class="moveup" href="#">Up</a> |
                 <a class="movedown" href="#">Down</a> |
@@ -239,16 +238,25 @@
         row.querySelector('a.play').addEventListener('click', function (event) {
             event.preventDefault();
             playingOrder = order;
-            player.src = `${host}/${mp3.s3_key}`
+            player.src = `${host}/${song.s3_key}`
             player.play();
             removePlayingClass();
             row.classList.add('playing');
         });
+        row.querySelector('a.search_artist').addEventListener('click', function (event) {
+            handleCatalogCellValueClick(event, this.innerHTML, 'artist');
+        });
+        row.querySelector('a.search_album').addEventListener('click', function (event) {
+            handleCatalogCellValueClick(event, this.innerHTML, 'album');
+        });
+        row.querySelector('a.search_title').addEventListener('click', function (event) {
+            handleCatalogCellValueClick(event, this.innerHTML, 'title');
+        });
     }
 
-    function addToPlaylist(mp3) {
-        playlist.push(mp3);
-        addPlaylistRow(mp3, playlist.length - 1)
+    function addToPlaylist(song) {
+        playlist.push(song);
+        addPlaylistRow(song)
         showHideColumns();
     }
 
@@ -263,27 +271,66 @@
         });
     }
 
-    function addMp3Row(mp3) {
-        const row = mp3sTbody.insertRow();
+    function addCatalogRow(song) {
+        const row = catalogTbody.insertRow();
         row.innerHTML = `
         <tr>
-            <td class="artist">${mp3.artist ? mp3.artist : ''}</td>
-            <td class="album">${mp3.album ? mp3.album : ''}</td>
-            <td class="title">${mp3.title ? mp3.title : ''}</td>
-            <td class="track">${mp3.track ? mp3.track : ''}</td>
-            <td class="filename">${mp3.filename ? mp3.filename : ''}</td>
-            <td class="pagecontrols"><a class="addmp3" href="#">Add</a></td>
+            <td class="artist"><a class="search_artist">${song.artist ? song.artist : ''}</a></td>
+            <td class="album"><a class="search_album">${song.album ? song.album : ''}</a></td>
+            <td class="title"><a class="search_title">${song.title ? song.title : ''}</a></td>
+            <td class="track">${song.track ? song.track : ''}</td>
+            <td class="filename">${song.filename ? song.filename : ''}</td>
+            <td class="pagecontrols"><a class="add_to_pl" href="#">Add</a></td>
         </tr>`;
-        row.querySelector('a.addmp3').addEventListener('click', function (event) {
+        row.querySelector('a.add_to_pl').addEventListener('click', function (event) {
             event.preventDefault();
-            addToPlaylist(mp3);
+            addToPlaylist(song);
+        });
+        row.querySelector('a.search_artist').addEventListener('click', function (event) {
+            handleCatalogCellValueClick(event, this.innerHTML, 'artist');
+        });
+        row.querySelector('a.search_album').addEventListener('click', function (event) {
+            handleCatalogCellValueClick(event, this.innerHTML, 'album');
+        });
+        row.querySelector('a.search_title').addEventListener('click', function (event) {
+            handleCatalogCellValueClick(event, this.innerHTML, 'title');
         });
     }
 
-    function addMp3s(mp3s) {
-        mp3s.forEach((mp3, index) => {
-            addMp3Row(mp3)
-        });
+    function handleCatalogCellValueClick(event, searchValue, indexValue) {
+        event.preventDefault();
+        searchInput.value = searchValue;
+        indexSelect.value = indexValue;
+        queryAndUpdate();
+    }
+
+    function searchTerm() {
+        return makeTerm(searchInput.value);
+    }
+
+    function makeTerm(s) {
+        const digits = '0123456789';
+        const letters = 'abcdefghijklmnopqrstuvwxyz';
+        const allowed = digits + letters + ' ';
+
+        s = s.toLowerCase();
+
+        let filtered = '';
+        for (let ch of s) {
+            if (allowed.includes(ch)) {
+                filtered += ch;
+            } else {
+                filtered += ' ';
+            }
+        }
+
+        filtered = filtered.replace(/\s+/g, ' ');
+
+        return filtered;
+    }
+
+    function addCatalogRows(songs) {
+        songs.forEach(addCatalogRow);
         showHideColumns();
     }
 
@@ -293,43 +340,40 @@
         }
     }
 
-    function loadMp3s(collection, index, query, token, fn) {
-        const res = `${host}/songs?collection=${collection}&index=${index}&q=${query}&limit=25&token=${token}`
-        const xhr = new XMLHttpRequest();
-        xhr.open('GET', res, true);
-        xhr.onload = function (e) {
-            if (xhr.readyState === 4 && xhr.status === 200) {
-                fn(JSON.parse(xhr.responseText));
-            }
-        };
-        xhr.send(null);
+    function loadSongs(collection, index, query, token, fn) {
+        const res = `${host}/songs?collection=${collection}&index=${index}&q=${query}&limit=25&token=${token}`;
+        return fetch(res)
+            .then(response => {
+                if (response.ok) {
+                    response.json().then(fn);
+                }
+            });
     }
 
-    function loadRandomMp3s(collection, fn) {
+    function loadRandomSongs(collection, fn) {
         const res = `${host}/songs/random?collection=${collection}&limit=25`
-        const xhr = new XMLHttpRequest();
-        xhr.open('GET', res, true);
-        xhr.onload = function (e) {
-            if (xhr.readyState === 4 && xhr.status === 200) {
-                fn(JSON.parse(xhr.responseText));
-            }
-        };
-        xhr.send(null);
+        return fetch(res)
+            .then(response => {
+                if (response.ok) {
+                    response.json().then(fn);
+                }
+            });
     }
 
     function onLoad(res) {
-        pageMp3s = res.items;
+        pageCatalog = res.items;
         pageToken = res.token;
-        removeAllRows(mp3sTbody);
-        addMp3s(res.items)
+        removeAllRows(catalogTbody);
+        addCatalogRows(res.items)
     }
 
     function queryAndUpdate() {
-        query = `${collectionSelect.value}/${indexSelect.value}/${searchInput.value}`;
+        const term = searchTerm();
+        query = `${collectionSelect.value}/${indexSelect.value}/${term}`;
         if (query !== lastQuery) {
             lastQuery = query;
             prevPageTokens = ['']
-            loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, '', onLoad);
+            loadSongs(collectionSelect.value, indexSelect.value, term, '', onLoad);
         }
     }
 
@@ -347,17 +391,15 @@
 
     addPageLink.addEventListener('click', function (event) {
         event.preventDefault();
-        if (pageMp3s) {
-            pageMp3s.forEach((mp3) => {
-                addToPlaylist(mp3);
-            });
+        if (pageCatalog) {
+            pageCatalog.forEach(addToPlaylist);
         }
     });
 
     resetLink.addEventListener('click', function (event) {
         event.preventDefault();
         prevPageTokens = ['']
-        loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, '', onLoad);
+        loadSongs(collectionSelect.value, indexSelect.value, searchTerm(), '', onLoad);
     });
 
     prevLink.addEventListener('click', function (event) {
@@ -365,20 +407,20 @@
         if (prevPageTokens.length > 1) {
             prevPageTokens.pop();
         }
-        loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, prevPageTokens[prevPageTokens.length - 1], onLoad);
+        loadSongs(collectionSelect.value, indexSelect.value, searchTerm(), prevPageTokens[prevPageTokens.length - 1], onLoad);
     });
 
     nextLink.addEventListener('click', function (event) {
         event.preventDefault();
         if (pageToken) {
             prevPageTokens.push(pageToken)
-            loadMp3s(collectionSelect.value, indexSelect.value, searchInput.value, pageToken, onLoad);
+            loadSongs(collectionSelect.value, indexSelect.value, searchTerm(), pageToken, onLoad);
         }
     });
 
     function syncPlayer() {
-        const mp3 = playlist[playingOrder];
-        player.src = `${host}/${mp3.s3_key}`
+        const song = playlist[playingOrder];
+        player.src = `${host}/${song.s3_key}`
         player.play();
         syncPlaylistTable();
     }
@@ -420,10 +462,8 @@
     randomLink.addEventListener('click', function (event) {
         event.preventDefault();
         clearPlaylist();
-        loadRandomMp3s(collectionSelect.value, function (res) {
-            res.items.forEach((mp3, index) => {
-                addToPlaylist(mp3);
-            });
+        loadRandomSongs(collectionSelect.value, function (res) {
+            res.items.forEach(addToPlaylist);
         })
     })
 
