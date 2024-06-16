@@ -98,6 +98,7 @@
         <tr>
             <td class="pagecontrols" colspan="5">
                 <a id="random" href="#">Random</a> |
+                <a id="shuffle" href="#">Shuffle</a> |
                 <a id="clearlist" href="#">Clear</a> |
                 <a id="playprev" href="#">Prev</a> |
                 <a id="playnext" href="#">Next</a>
@@ -123,6 +124,7 @@
     const playNextLink = document.getElementById('playnext');
     const clearListLink = document.getElementById('clearlist');
     const randomLink = document.getElementById('random');
+    const shuffleLink = document.getElementById('shuffle');
     const catalogTbody = document.getElementById('catalog');
     const playlistTbody = document.getElementById('playlist');
     const chkArtist = document.getElementById('chkartist');
@@ -454,6 +456,17 @@
         }
     }
 
+    // ChatGPT 4o
+    // Q: Write an array shuffle function in JavaScript.
+    // A: Sure, here's a commonly used array shuffle function in JavaScript, based on the Fisher-Yates (Knuth) Shuffle algorithm:
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
     clearListLink.addEventListener('click', function (event) {
         event.preventDefault();
         clearPlaylist();
@@ -461,11 +474,16 @@
 
     randomLink.addEventListener('click', function (event) {
         event.preventDefault();
-        clearPlaylist();
         loadRandomSongs(collectionSelect.value, function (res) {
             res.items.forEach(addToPlaylist);
         })
-    })
+    });
+
+    shuffleLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        shuffleArray(playlist);
+        syncPlaylistTable();
+    });
 
     Object.values(chks).forEach((elem) => {
         elem.addEventListener('change', function () {

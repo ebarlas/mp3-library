@@ -2,7 +2,7 @@
 
 aws s3 cp . s3://barlasgarden/music/ --recursive \
 --exclude "*" \
---include "*.html" \
+--include "index.html" \
 --include "*.css" \
 --include "*.map"
 
