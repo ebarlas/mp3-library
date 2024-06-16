@@ -242,6 +242,7 @@
             playingOrder = order;
             player.src = `${host}/${song.s3_key}`
             player.play();
+            setMediaSessionMetadata(song);
             removePlayingClass();
             row.classList.add('playing');
         });
@@ -420,10 +421,21 @@
         }
     });
 
+    function setMediaSessionMetadata(song) {
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: song.title,
+                artist: song.artist,
+                album: song.album
+            });
+        }
+    }
+
     function syncPlayer() {
         const song = playlist[playingOrder];
-        player.src = `${host}/${song.s3_key}`
+        player.src = `${host}/${song.s3_key}`;
         player.play();
+        setMediaSessionMetadata(song);
         syncPlaylistTable();
     }
 
@@ -432,20 +444,28 @@
         syncPlayer();
     });
 
-    playPrevLink.addEventListener('click', function (event) {
-        event.preventDefault();
+    function playPrev() {
         if (playlist.length) {
             playingOrder = playingOrder === 0 ? playlist.length - 1 : playingOrder - 1;
             syncPlayer();
         }
+    }
+
+    playPrevLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        playPrev();
     });
 
-    playNextLink.addEventListener('click', function (event) {
-        event.preventDefault();
+    function playNext() {
         if (playlist.length) {
             playingOrder = (playingOrder + 1) % playlist.length;
             syncPlayer();
         }
+    }
+
+    playNextLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        playNext();
     });
 
     function clearPlaylist() {
@@ -492,5 +512,23 @@
     });
 
     queryAndUpdate('');
+
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('play', () => {
+            player.play();
+        });
+
+        navigator.mediaSession.setActionHandler('pause', () => {
+            player.pause();
+        });
+
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+            playPrev();
+        });
+
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+            playNext();
+        });
+    }
 </script>
 </html>
