@@ -143,7 +143,7 @@ def upload(dynamo, s3, collection, root, files, offset):
 
 
 def mp3_files(root):
-    return sorted([(top, f) for top, _, files in os.walk(root) for f in files if f.endswith('.mp3')])
+    return sorted([(top, f) for top, _, files in os.walk(root) for f in files if f.lower().endswith('.mp3')])
 
 
 def main(collection, root, start, end, dry_run):
