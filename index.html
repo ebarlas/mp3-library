@@ -7,7 +7,15 @@
     <title>Songs</title>
     <style>
         tr.playing {
-            background: lightblue;
+            background: lightcyan;
+        }
+
+        tr.cached {
+            background: lightyellow;
+        }
+
+        tr.playing.cached {
+            background: lightcyan;
         }
 
         .pagecontrols {
@@ -25,7 +33,8 @@
         <div class="grid">
             <select id="collection" required>
                 <option value="music_reorganized">Freshman Compilation 2003</option>
-                <option value="itunes_music" selected>ITunes Music 2009</option>
+                <option value="itunes_music">ITunes Music 2009</option>
+                <option value="itunes_music_2011" selected>ITunes Music 2011</option>
                 <option value="josh_high_school">Josh High School</option>
                 <option value="dos_mundos">Dos Mundos</option>
             </select>
@@ -74,6 +83,7 @@
         <tfoot>
         <tr>
             <td class="pagecontrols" colspan="5">
+                <a id="random" href="#">Random</a> |
                 <a id="addpage" href="#">Add All</a> |
                 <a id="resetpage" href="#">Reset</a> |
                 <a id="prevpage" href="#">Prev</a> |
@@ -98,7 +108,8 @@
         <tfoot>
         <tr>
             <td class="pagecontrols" colspan="5">
-                <a id="random" href="#">Random</a> |
+                <a id="clearcache" href="#">Clear Cache</a> |
+                <a id="cacheall" href="#">Cache All</a> |
                 <a id="shuffle" href="#">Shuffle</a> |
                 <a id="clearlist" href="#">Clear</a> |
                 <a id="playprev" href="#">Prev</a> |
@@ -109,59 +120,609 @@
     </table>
     <audio id="player" controls>
     </audio>
+    <p></p>
+    <table>
+        <thead>
+        <tr>
+            <th class="id" scope="col">ID</th>
+            <th class="date" scope="col">Date</th>
+            <th class="message" scope="col">Message</th>
+        </tr>
+        </thead>
+        <tbody id="messages">
+        </tbody>
+    </table>
 </main>
 </body>
 <script>
     const host = "https://www.barlasgarden.com";
 
-    const searchInput = document.getElementById('search');
-    const collectionSelect = document.getElementById('collection');
-    const indexSelect = document.getElementById('index');
-    const resetLink = document.getElementById('resetpage');
-    const addPageLink = document.getElementById('addpage');
-    const prevLink = document.getElementById('prevpage');
-    const nextLink = document.getElementById('nextpage');
-    const playPrevLink = document.getElementById('playprev');
-    const playNextLink = document.getElementById('playnext');
-    const clearListLink = document.getElementById('clearlist');
-    const randomLink = document.getElementById('random');
-    const shuffleLink = document.getElementById('shuffle');
-    const catalogTbody = document.getElementById('catalog');
-    const playlistTbody = document.getElementById('playlist');
-    const chkArtist = document.getElementById('chkartist');
-    const chkAlbum = document.getElementById('chkalbum');
-    const chkTitle = document.getElementById('chktitle');
-    const chkTrack = document.getElementById('chktrack');
-    const chkFilename = document.getElementById('chkfilename');
-    const player = document.getElementById('player');
+    class Log {
+        constructor() {
+            this.counter = 1;
+            this.tbody = document.getElementById('messages');
+        }
 
-    const playlist = [];
-    let playingOrder;
-    let lastQuery = '';
-    let pageCatalog;
-    let pageToken = '';
-    let prevPageTokens = [''];
+        formatLocalDateTime(date = new Date()) {
+            const pad = (num, width) => num.toString().padStart(width || 2, '0');
 
-    const chks = {
-        artist: chkArtist,
-        album: chkAlbum,
-        title: chkTitle,
-        track: chkTrack,
-        filename: chkFilename
-    };
+            return [
+                date.getFullYear(),
+                pad(date.getMonth() + 1),
+                pad(date.getDate())
+            ].join('-') + ' ' + [
+                pad(date.getHours()),
+                pad(date.getMinutes()),
+                pad(date.getSeconds()),
+                pad(date.getMilliseconds(), 3)
+            ].join(':');
+        }
 
-    function syncPlaylistTable() {
-        removeAllRows(playlistTbody);
-        playlist.forEach(addPlaylistRow);
-        showHideColumns();
-    }
-
-    function removePlayingClass() {
-        const e = document.querySelector("tr.playing");
-        if (e) {
-            e.classList.remove('playing');
+        append(message) {
+            const row = this.tbody.insertRow();
+            row.insertCell().textContent = this.counter++;
+            row.insertCell().textContent = this.formatLocalDateTime();
+            row.insertCell().textContent = message;
         }
     }
+
+    const log = new Log();
+
+    class Database {
+        static DB_NAME = "mp3s";
+        static STORE_NAME = "mp3s";
+        static VERSION = 1;
+
+        #db = undefined
+        #initialKeys = []
+        #storedKeys = []
+
+        constructor() {
+            this.#open()
+                .then(() => this.#loadKeys())
+                .then(keys => log.append(`IndexedDB database keys loaded, count=${keys.length}`))
+                .catch(error => log.append(`Error occurred initializing database: ${error.message}`));
+        }
+
+        clear() {
+            return new Promise((resolve, reject) => {
+                const store = this.#getStore("readwrite");
+                const request = store.clear();
+                request.onsuccess = () => {
+                    this.#storedKeys = 0;
+                    resolve();
+                };
+                request.onerror = (event) => {
+                    reject(event.target.error);
+                };
+            });
+        }
+
+        #open() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(Database.DB_NAME, Database.VERSION);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    db.createObjectStore(Database.STORE_NAME);
+                };
+                request.onsuccess = (event) => {
+                    this.#db = event.target.result;
+                    resolve();
+                };
+                request.onerror = (event) => {
+                    reject(event.target.error);
+                };
+            });
+        }
+
+        #getStore(mode) {
+            const transaction = this.#db.transaction(Database.STORE_NAME, mode);
+            return transaction.objectStore(Database.STORE_NAME);
+        }
+
+        hasKey(key) {
+            return this.#initialKeys.includes(key) || this.#storedKeys.includes(key);
+        }
+
+        #loadKeys() {
+            return new Promise((resolve, reject) => {
+                const store = this.#getStore("readonly");
+                const request = store.getAllKeys();
+                request.onsuccess = (event) => {
+                    this.#initialKeys = event.target.result;
+                    resolve(this.#initialKeys);
+                };
+                request.onerror = (event) => {
+                    reject(event.target.error);
+                };
+            });
+        }
+
+        load(key) {
+            return new Promise((resolve, reject) => {
+                const store = this.#getStore("readonly");
+                const request = store.get(key);
+                request.onsuccess = (event) => {
+                    resolve(event.target.result);
+                };
+                request.onerror = (event) => {
+                    reject(event.target.error);
+                };
+            });
+        }
+
+        store(key, blob) {
+            return new Promise((resolve, reject) => {
+                const store = this.#getStore("readwrite");
+                const request = store.put(blob, key);
+                request.onsuccess = () => {
+                    this.#storedKeys.push(key);
+                    resolve(blob);
+                };
+                request.onerror = (event) => {
+                    reject(event.target.error);
+                };
+            });
+        }
+    }
+
+    class Display {
+        #chks = undefined
+
+        constructor() {
+            this.#chks = {
+                artist: document.getElementById('chkartist'),
+                album: document.getElementById('chkalbum'),
+                title: document.getElementById('chktitle'),
+                track: document.getElementById('chktrack'),
+                filename: document.getElementById('chkfilename')
+            };
+            Object.values(this.#chks).forEach((elem) => {
+                elem.addEventListener('change', () => this.showHideColumns());
+            });
+        }
+
+        showHideColumns() {
+            Object.entries(this.#chks).forEach(function ([key, value]) {
+                const elems = document.querySelectorAll(`.${key}`);
+                if (value.checked) {
+                    elems.forEach(e => e.classList.remove('hide'));
+                } else {
+                    elems.forEach(e => e.classList.add('hide'));
+                }
+            });
+        };
+    }
+
+    class Catalog {
+        static SEARCH_LIMIT = 25;
+        static RANDOM_LIMIT = 25;
+
+        #searchInput = document.getElementById('search');
+        #collectionSelect = document.getElementById('collection');
+        #indexSelect = document.getElementById('index');
+        #catalogTbody = document.getElementById('catalog');
+        #resetLink = document.getElementById('resetpage');
+        #prevLink = document.getElementById('prevpage');
+        #nextLink = document.getElementById('nextpage');
+        #addPageLink = document.getElementById('addpage');
+        #randomLink = document.getElementById('random');
+        #lastQuery = ''
+        #prevPageTokens = ['']
+        #pageCatalog = []
+        #pageToken = ''
+        #playlist = undefined
+        #display = undefined
+
+        constructor(playlist, display) {
+            this.#playlist = playlist;
+            this.#display = display;
+            this.#syncWithInput();
+            this.#collectionSelect.addEventListener('change', () => this.#syncWithInput());
+            this.#indexSelect.addEventListener('change', () => this.#syncWithInput());
+            this.#searchInput.addEventListener('keyup', () => {
+                this.#syncWithInput()
+            });
+            this.#resetLink.addEventListener('click', (event) => {
+                event.preventDefault();
+                this.#prevPageTokens = [''] // reset pagination
+                const [collection, index, term] = this.#getInput();
+                this.#loadSongsAndUpdate(collection, index, term, '');
+            });
+            this.#prevLink.addEventListener('click', event => {
+                event.preventDefault();
+                if (this.#prevPageTokens.length > 1) {
+                    this.#prevPageTokens.pop(); // may leave root entry: ['']
+                }
+                const [collection, index, term] = this.#getInput();
+                const token = this.#prevPageTokens[this.#prevPageTokens.length - 1];
+                this.#loadSongsAndUpdate(collection, index, term, token);
+            });
+            this.#nextLink.addEventListener('click', event => {
+                event.preventDefault();
+                if (this.#pageToken) {
+                    this.#prevPageTokens.push(this.#pageToken);
+                    const [collection, index, term] = this.#getInput();
+                    this.#loadSongsAndUpdate(collection, index, term, this.#pageToken);
+                }
+            });
+            this.#addPageLink.addEventListener('click', event => {
+                event.preventDefault();
+                if (this.#pageCatalog) {
+                    this.#pageCatalog.forEach(song => this.#playlist.addToPlaylist(song));
+                }
+            });
+            this.#randomLink.addEventListener('click', event => {
+                event.preventDefault();
+                const collection = this.#collectionSelect.value;
+                this.#loadRandomSongs(collection).then(res => {
+                    log.append(`Loaded randoms songs, collection=${collection}, items=${res.items.length}`);
+                    this.#update(res);
+                });
+            })
+        }
+
+        #getInput() {
+            return [
+                this.#collectionSelect.value,
+                this.#indexSelect.value,
+                this.#searchTerm()
+            ];
+        }
+
+        #syncWithInput() {
+            const [collection, index, term] = this.#getInput();
+            const query = `${collection}/${index}/${term}`;
+            if (query === this.#lastQuery) {
+                return;
+            }
+            this.#lastQuery = query;
+            this.#prevPageTokens = ['']
+            this.#loadSongsAndUpdate(collection, index, term, '');
+        }
+
+        #update(res) {
+            this.#pageCatalog = res.items;
+            this.#pageToken = res.token;
+            removeAllRows(this.#catalogTbody);
+            this.#addCatalogRows(res.items);
+        }
+
+        #loadSongsAndUpdate(collection, index, term, token) {
+            this.#loadSongs(collection, index, term, token)
+                .then(res => {
+                    log.append(`Loaded songs page, collection=${collection}, index=${index}, term=${term}, items=${res.items.length}`);
+                    this.#update(res);
+                });
+        }
+
+        #addCatalogRows(songs) {
+            songs.forEach(song => this.#addCatalogRow(song));
+            this.#display.showHideColumns();
+        }
+
+        #addCatalogRow(song) {
+            const row = this.#catalogTbody.insertRow();
+            row.innerHTML = `
+            <td class="artist"><a class="search_artist">${song.artist || ''}</a></td>
+            <td class="album"><a class="search_album">${song.album || ''}</a></td>
+            <td class="title"><a class="search_title">${song.title || ''}</a></td>
+            <td class="track">${song.track || ''}</td>
+            <td class="filename">${song.filename || ''}</td>
+            <td class="pagecontrols"><a class="add_to_pl" href="#">Add</a></td>`;
+            row.querySelector('a.add_to_pl').addEventListener('click', (event) => {
+                event.preventDefault();
+                this.#playlist.addToPlaylist(song);
+            });
+            const catalog = this;
+            row.querySelector('a.search_artist').addEventListener('click', function (event) {
+                catalog.#handleCatalogCellValueClick(event, this.innerHTML, 'artist');
+            });
+            row.querySelector('a.search_album').addEventListener('click', function (event) {
+                catalog.#handleCatalogCellValueClick(event, this.innerHTML, 'album');
+            });
+            row.querySelector('a.search_title').addEventListener('click', function (event) {
+                catalog.#handleCatalogCellValueClick(event, this.innerHTML, 'title');
+            });
+        }
+
+        #handleCatalogCellValueClick(event, searchValue, indexValue) {
+            event.preventDefault();
+            this.#searchInput.value = searchValue;
+            this.#indexSelect.value = indexValue;
+            this.#syncWithInput();
+        }
+
+        #loadRandomSongs(collection) {
+            const params = {collection, limit: Catalog.RANDOM_LIMIT};
+            const url = `${host}/songs/random?${new URLSearchParams(params)}`;
+            return fetch(url)
+                .then(res => {
+                    if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
+                    return res.json();
+                })
+                .catch(err => {
+                    log.append(`Error fetching random songs: ${err.message}`);
+                    return { items: [], token: "" };
+                });
+        }
+
+        #loadSongs(collection, index, query, token) {
+            const params = {collection, index, q: query, limit: Catalog.SEARCH_LIMIT, token};
+            const url = `${host}/songs?${new URLSearchParams(params)}`;
+            return fetch(url)
+                .then(res => {
+                    if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
+                    return res.json();
+                })
+                .catch(err => {
+                    log.append(`Error fetching songs: ${err.message}`);
+                    return { items: [], token: "" };
+                });
+        }
+
+        #searchTerm() {
+            return this.#makeTerm(this.#searchInput.value);
+        }
+
+        #makeTerm(s) {
+            return s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+    }
+
+    class Playlist {
+        #playlistTbody = document.getElementById('playlist');
+        #playPrevLink = document.getElementById('playprev');
+        #playNextLink = document.getElementById('playnext');
+        #clearListLink = document.getElementById('clearlist');
+        #shuffleLink = document.getElementById('shuffle');
+        #clearCacheLink = document.getElementById('clearcache');
+        #cacheAllLink = document.getElementById('cacheall');
+        #player = document.getElementById('player');
+        #playlist = []
+        #playingOrder = undefined
+        #database = undefined
+        #display = undefined
+
+        constructor(database, display) {
+            this.#database = database;
+            this.#display = display
+            this.#clearListLink.addEventListener('click', event => {
+                event.preventDefault();
+                this.#clearPlaylist();
+            });
+            this.#playPrevLink.addEventListener('click', event => {
+                event.preventDefault();
+                this.#playPrev();
+            })
+            this.#playNextLink.addEventListener('click', event => {
+                event.preventDefault();
+                this.#playNext();
+            })
+            this.#player.addEventListener('ended', event => {
+                this.#playingOrder = (this.#playingOrder + 1) % this.#playlist.length;
+                this.#syncPlayer();
+            });
+            this.#shuffleLink.addEventListener('click', event => {
+                event.preventDefault();
+                shuffleArray(this.#playlist);
+                this.#syncPlaylistTable();
+            })
+            this.#clearCacheLink.addEventListener('click', event => {
+                event.preventDefault();
+                this.#database.clear();
+                this.#removeCachedClass();
+                log.append("Cleared IndexedDB song cache");
+            })
+            this.#cacheAllLink.addEventListener('click', event => {
+                event.preventDefault();
+                document.querySelectorAll("a.cache").forEach(link => link.click());
+            })
+            this.#initMediaSession();
+        }
+
+        #initMediaSession() {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.setActionHandler('play', () => {
+                    this.#player.play();
+                });
+
+                navigator.mediaSession.setActionHandler('pause', () => {
+                    this.#player.pause();
+                });
+
+                navigator.mediaSession.setActionHandler('previoustrack', () => {
+                    this.#playPrev();
+                });
+
+                navigator.mediaSession.setActionHandler('nexttrack', () => {
+                    this.#playNext();
+                });
+            }
+        }
+
+        #playPrev() {
+            if (this.#playlist.length) {
+                this.#playingOrder = this.#playingOrder === 0 ? this.#playlist.length - 1 : this.#playingOrder - 1;
+                this.#syncPlayer();
+            }
+        }
+
+        #playNext() {
+            if (this.#playlist.length) {
+                this.#playingOrder = (this.#playingOrder + 1) % this.#playlist.length;
+                this.#syncPlayer();
+            }
+        }
+
+        #syncPlayer() {
+            const song = this.#playlist[this.#playingOrder];
+            this.#player.src = `${host}/${song.s3_key}`;
+            this.#player.play();
+            this.#setMediaSessionMetadata(song);
+            this.#syncPlaylistTable();
+        }
+
+        #setMediaSessionMetadata(song) {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: song.title,
+                    artist: song.artist,
+                    album: song.album
+                });
+            }
+        }
+
+        #clearPlaylist() {
+            if (this.#playlist.length) {
+                this.#playlist.length = 0;
+                this.#stopPlayer();
+                this.#syncPlaylistTable();
+            }
+        }
+
+        addToPlaylist(song) {
+            this.#playlist.push(song);
+            this.#addPlaylistRow(song)
+            this.#display.showHideColumns();
+        }
+
+        #stopPlayer() {
+            this.#player.pause();
+            this.#player.src = '';
+            this.#playingOrder = -1;
+        }
+
+        #moveUp(order) {
+            if (order > 0) {
+                swapLeft(this.#playlist, order);
+                if (order === this.#playingOrder) {
+                    this.#playingOrder--;
+                }
+            }
+            this.#syncPlaylistTable();
+        }
+
+        #moveDown(order) {
+            if (order < this.#playlist.length - 1) {
+                swapRight(this.#playlist, order);
+                if (order === this.#playingOrder) {
+                    this.#playingOrder++;
+                }
+            }
+            this.#syncPlaylistTable();
+        }
+
+        #moveOut(order) {
+            if (order === this.#playingOrder) {
+                this.#stopPlayer();
+            }
+            this.#playlist.splice(order, 1);
+            this.#syncPlaylistTable();
+        }
+
+        #syncPlaylistTable() {
+            removeAllRows(this.#playlistTbody);
+            this.#playlist.forEach(song => this.#addPlaylistRow(song));
+            this.#display.showHideColumns();
+        }
+
+        #removePlayingClass() {
+            document.querySelectorAll("tr.playing").forEach(e => e.classList.remove('playing'));
+        }
+
+        #removeCachedClass() {
+            document.querySelectorAll("tr.cached").forEach(e => e.classList.remove('cached'));
+        }
+
+        #formatBytes(bytes) {
+            const kb = 1_024;
+            const mb = kb * kb;
+            if (bytes >= mb) {
+                return (bytes / mb).toFixed(2) + " MB";
+            } else if (bytes >= kb) {
+                return (bytes / kb).toFixed(2) + " KB";
+            } else {
+                return bytes + " bytes";
+            }
+        }
+
+        #cacheSong(song, tableRow) {
+            fetch(`${host}/${song.s3_key}`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
+                    return res.blob();
+                })
+                .then(blob => this.#database.store(song.s3_key, blob))
+                .then(blob => {
+                    tableRow.classList.add('cached');
+                    log.append(`Saved in IndexedDB, song=${song.s3_key}, size=${this.#formatBytes(blob.size)}`)
+                })
+                .catch(error => log.append(`Error loading and caching ${song.s3_key}: ${error.message}`));
+        }
+
+        #addPlaylistRow(song) {
+            const row = this.#playlistTbody.insertRow();
+            const order = row.rowIndex - 1;
+            const playing = order === this.#playingOrder;
+            row.innerHTML = `
+            <td class="artist">${song.artist || ''}</td>
+            <td class="album">${song.album || ''}</td>
+            <td class="title">${song.title || ''}</td>
+            <td class="track">${song.track || ''}</td>
+            <td class="filename">${song.filename || ''}</td>
+            <td class="pagecontrols">
+                <a class="moveup" href="#">Up</a> |
+                <a class="movedown" href="#">Down</a> |
+                <a class="del" href="#">Del</a> |
+                <a class="play" href="#">Play</a> |
+                <a class="cache" href="#">Cache</a>
+            </td>`;
+            if (playing) {
+                row.classList.add('playing');
+            }
+            if (this.#database.hasKey(song.s3_key)) {
+                row.classList.add('cached');
+            }
+            row.querySelector('a.moveup').addEventListener('click', event => {
+                event.preventDefault();
+                this.#moveUp(order);
+            });
+            row.querySelector('a.movedown').addEventListener('click', event => {
+                event.preventDefault();
+                this.#moveDown(order);
+            });
+            row.querySelector('a.del').addEventListener('click', event => {
+                event.preventDefault();
+                this.#moveOut(order);
+            });
+            const playSong = url => {
+                this.#playingOrder = order;
+                this.#player.src = url;
+                this.#player.play();
+                this.#setMediaSessionMetadata(song);
+                this.#removePlayingClass();
+                row.classList.add('playing');
+            };
+            row.querySelector('a.play').addEventListener('click', event => {
+                event.preventDefault();
+                if (this.#database.hasKey(song.s3_key)) {
+                    this.#database.load(song.s3_key).then(blob => playSong(URL.createObjectURL(blob)));
+                } else {
+                    playSong(`${host}/${song.s3_key}`);
+                }
+            });
+            row.querySelector('a.cache').addEventListener('click', event => {
+                event.preventDefault();
+                this.#cacheSong(song, row);
+            });
+        }
+    }
+
+    const display = new Display();
+    const database = new Database();
+    const playlist = new Playlist(database, display);
+    const catalog = new Catalog(playlist, display);
 
     function swapLeft(arr, index) {
         [arr[index - 1], arr[index]] = [arr[index], arr[index - 1]];
@@ -171,309 +732,9 @@
         [arr[index + 1], arr[index]] = [arr[index], arr[index + 1]];
     }
 
-    function moveUp(order) {
-        if (order > 0) {
-            swapLeft(playlist, order);
-            if (order === playingOrder) {
-                playingOrder--;
-            }
-        }
-        syncPlaylistTable();
-    }
-
-    function moveDown(order) {
-        if (order < playlist.length - 1) {
-            swapRight(playlist, order);
-            if (order === playingOrder) {
-                playingOrder++;
-            }
-        }
-        syncPlaylistTable();
-    }
-
-    function stopPlayer() {
-        player.pause();
-        player.src = '';
-        playingOrder = -1;
-    }
-
-    function moveOut(order) {
-        if (order === playingOrder) {
-            stopPlayer();
-        }
-        playlist.splice(order, 1);
-        syncPlaylistTable();
-    }
-
-    function addPlaylistRow(song) {
-        const row = playlistTbody.insertRow();
-        const order = row.rowIndex - 1;
-        const playing = order === playingOrder;
-        row.innerHTML = `
-        <tr>
-            <td class="artist"><a class="search_artist">${song.artist ? song.artist : ''}</a></td>
-            <td class="album"><a class="search_album">${song.album ? song.album : ''}</a></td>
-            <td class="title"><a class="search_title">${song.title ? song.title : ''}</a></td>
-            <td class="track">${song.track ? song.track : ''}</td>
-            <td class="filename">${song.filename ? song.filename : ''}</td>
-            <td class="pagecontrols">
-                <a class="moveup" href="#">Up</a> |
-                <a class="movedown" href="#">Down</a> |
-                <a class="del" href="#">Del</a> |
-                <a class="play" href="#">Play</a>
-            </td>
-        </tr>`;
-        if (playing) {
-            row.classList.add('playing');
-        }
-        row.querySelector('a.moveup').addEventListener('click', function (event) {
-            event.preventDefault();
-            moveUp(order);
-        });
-        row.querySelector('a.movedown').addEventListener('click', function (event) {
-            event.preventDefault();
-            moveDown(order);
-        });
-        row.querySelector('a.del').addEventListener('click', function (event) {
-            event.preventDefault();
-            moveOut(order);
-        });
-        row.querySelector('a.play').addEventListener('click', function (event) {
-            event.preventDefault();
-            playingOrder = order;
-            player.src = `${host}/${song.s3_key}`
-            player.play();
-            setMediaSessionMetadata(song);
-            removePlayingClass();
-            row.classList.add('playing');
-        });
-        row.querySelector('a.search_artist').addEventListener('click', function (event) {
-            handleCatalogCellValueClick(event, this.innerHTML, 'artist');
-        });
-        row.querySelector('a.search_album').addEventListener('click', function (event) {
-            handleCatalogCellValueClick(event, this.innerHTML, 'album');
-        });
-        row.querySelector('a.search_title').addEventListener('click', function (event) {
-            handleCatalogCellValueClick(event, this.innerHTML, 'title');
-        });
-    }
-
-    function addToPlaylist(song) {
-        playlist.push(song);
-        addPlaylistRow(song)
-        showHideColumns();
-    }
-
-    function showHideColumns() {
-        Object.entries(chks).forEach(function ([key, value]) {
-            const elems = document.querySelectorAll(`.${key}`);
-            if (value.checked) {
-                elems.forEach(e => e.classList.remove('hide'));
-            } else {
-                elems.forEach(e => e.classList.add('hide'));
-            }
-        });
-    }
-
-    function addCatalogRow(song) {
-        const row = catalogTbody.insertRow();
-        row.innerHTML = `
-        <tr>
-            <td class="artist"><a class="search_artist">${song.artist ? song.artist : ''}</a></td>
-            <td class="album"><a class="search_album">${song.album ? song.album : ''}</a></td>
-            <td class="title"><a class="search_title">${song.title ? song.title : ''}</a></td>
-            <td class="track">${song.track ? song.track : ''}</td>
-            <td class="filename">${song.filename ? song.filename : ''}</td>
-            <td class="pagecontrols"><a class="add_to_pl" href="#">Add</a></td>
-        </tr>`;
-        row.querySelector('a.add_to_pl').addEventListener('click', function (event) {
-            event.preventDefault();
-            addToPlaylist(song);
-        });
-        row.querySelector('a.search_artist').addEventListener('click', function (event) {
-            handleCatalogCellValueClick(event, this.innerHTML, 'artist');
-        });
-        row.querySelector('a.search_album').addEventListener('click', function (event) {
-            handleCatalogCellValueClick(event, this.innerHTML, 'album');
-        });
-        row.querySelector('a.search_title').addEventListener('click', function (event) {
-            handleCatalogCellValueClick(event, this.innerHTML, 'title');
-        });
-    }
-
-    function handleCatalogCellValueClick(event, searchValue, indexValue) {
-        event.preventDefault();
-        searchInput.value = searchValue;
-        indexSelect.value = indexValue;
-        queryAndUpdate();
-    }
-
-    function searchTerm() {
-        return makeTerm(searchInput.value);
-    }
-
-    function makeTerm(s) {
-        const digits = '0123456789';
-        const letters = 'abcdefghijklmnopqrstuvwxyz';
-        const allowed = digits + letters + ' ';
-
-        s = s.toLowerCase();
-
-        let filtered = '';
-        for (let ch of s) {
-            if (allowed.includes(ch)) {
-                filtered += ch;
-            } else {
-                filtered += ' ';
-            }
-        }
-
-        filtered = filtered.replace(/\s+/g, ' ');
-
-        return filtered;
-    }
-
-    function addCatalogRows(songs) {
-        songs.forEach(addCatalogRow);
-        showHideColumns();
-    }
-
     function removeAllRows(tbody) {
         while (tbody.firstChild) {
             tbody.removeChild(tbody.firstChild);
-        }
-    }
-
-    function loadSongs(collection, index, query, token, fn) {
-        const res = `${host}/songs?collection=${collection}&index=${index}&q=${query}&limit=25&token=${token}`;
-        return fetch(res)
-            .then(response => {
-                if (response.ok) {
-                    response.json().then(fn);
-                }
-            });
-    }
-
-    function loadRandomSongs(collection, fn) {
-        const res = `${host}/songs/random?collection=${collection}&limit=25`
-        return fetch(res)
-            .then(response => {
-                if (response.ok) {
-                    response.json().then(fn);
-                }
-            });
-    }
-
-    function onLoad(res) {
-        pageCatalog = res.items;
-        pageToken = res.token;
-        removeAllRows(catalogTbody);
-        addCatalogRows(res.items)
-    }
-
-    function queryAndUpdate() {
-        const term = searchTerm();
-        query = `${collectionSelect.value}/${indexSelect.value}/${term}`;
-        if (query !== lastQuery) {
-            lastQuery = query;
-            prevPageTokens = ['']
-            loadSongs(collectionSelect.value, indexSelect.value, term, '', onLoad);
-        }
-    }
-
-    collectionSelect.addEventListener('change', function (event) {
-        queryAndUpdate();
-    });
-
-    indexSelect.addEventListener('change', function (event) {
-        queryAndUpdate();
-    });
-
-    searchInput.addEventListener('keyup', function (event) {
-        queryAndUpdate();
-    });
-
-    addPageLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        if (pageCatalog) {
-            pageCatalog.forEach(addToPlaylist);
-        }
-    });
-
-    resetLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        prevPageTokens = ['']
-        loadSongs(collectionSelect.value, indexSelect.value, searchTerm(), '', onLoad);
-    });
-
-    prevLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        if (prevPageTokens.length > 1) {
-            prevPageTokens.pop();
-        }
-        loadSongs(collectionSelect.value, indexSelect.value, searchTerm(), prevPageTokens[prevPageTokens.length - 1], onLoad);
-    });
-
-    nextLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        if (pageToken) {
-            prevPageTokens.push(pageToken)
-            loadSongs(collectionSelect.value, indexSelect.value, searchTerm(), pageToken, onLoad);
-        }
-    });
-
-    function setMediaSessionMetadata(song) {
-        if ('mediaSession' in navigator) {
-            navigator.mediaSession.metadata = new MediaMetadata({
-                title: song.title,
-                artist: song.artist,
-                album: song.album
-            });
-        }
-    }
-
-    function syncPlayer() {
-        const song = playlist[playingOrder];
-        player.src = `${host}/${song.s3_key}`;
-        player.play();
-        setMediaSessionMetadata(song);
-        syncPlaylistTable();
-    }
-
-    player.addEventListener('ended', function (event) {
-        playingOrder = (playingOrder + 1) % playlist.length;
-        syncPlayer();
-    });
-
-    function playPrev() {
-        if (playlist.length) {
-            playingOrder = playingOrder === 0 ? playlist.length - 1 : playingOrder - 1;
-            syncPlayer();
-        }
-    }
-
-    playPrevLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        playPrev();
-    });
-
-    function playNext() {
-        if (playlist.length) {
-            playingOrder = (playingOrder + 1) % playlist.length;
-            syncPlayer();
-        }
-    }
-
-    playNextLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        playNext();
-    });
-
-    function clearPlaylist() {
-        if (playlist.length) {
-            playlist.length = 0;
-            stopPlayer();
-            syncPlaylistTable();
         }
     }
 
@@ -486,50 +747,6 @@
             [array[i], array[j]] = [array[j], array[i]];
         }
         return array;
-    }
-
-    clearListLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        clearPlaylist();
-    });
-
-    randomLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        loadRandomSongs(collectionSelect.value, function (res) {
-            res.items.forEach(addToPlaylist);
-        })
-    });
-
-    shuffleLink.addEventListener('click', function (event) {
-        event.preventDefault();
-        shuffleArray(playlist);
-        syncPlaylistTable();
-    });
-
-    Object.values(chks).forEach((elem) => {
-        elem.addEventListener('change', function () {
-            showHideColumns();
-        });
-    });
-
-    queryAndUpdate('');
-
-    if ('mediaSession' in navigator) {
-        navigator.mediaSession.setActionHandler('play', () => {
-            player.play();
-        });
-
-        navigator.mediaSession.setActionHandler('pause', () => {
-            player.pause();
-        });
-
-        navigator.mediaSession.setActionHandler('previoustrack', () => {
-            playPrev();
-        });
-
-        navigator.mediaSession.setActionHandler('nexttrack', () => {
-            playNext();
-        });
     }
 </script>
 </html>
