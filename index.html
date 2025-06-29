@@ -317,7 +317,7 @@
         constructor(playlist, display) {
             this.#playlist = playlist;
             this.#display = display;
-            this.#syncWithInput();
+            this.#loadRandomSongsAndUpdate();
             this.#collectionSelect.addEventListener('change', () => this.#syncWithInput());
             this.#indexSelect.addEventListener('change', () => this.#syncWithInput());
             this.#searchInput.addEventListener('keyup', () => {
@@ -354,11 +354,7 @@
             });
             this.#randomLink.addEventListener('click', event => {
                 event.preventDefault();
-                const collection = this.#collectionSelect.value;
-                this.#loadRandomSongs(collection).then(res => {
-                    log.append(`Loaded randoms songs, collection=${collection}, items=${res.items.length}`);
-                    this.#update(res);
-                });
+                this.#loadRandomSongsAndUpdate();
             })
         }
 
@@ -431,6 +427,14 @@
             this.#searchInput.value = searchValue;
             this.#indexSelect.value = indexValue;
             this.#syncWithInput();
+        }
+
+        #loadRandomSongsAndUpdate() {
+            const collection = this.#collectionSelect.value;
+            this.#loadRandomSongs(collection).then(res => {
+                log.append(`Loaded randoms songs, collection=${collection}, items=${res.items.length}`);
+                this.#update(res);
+            });
         }
 
         #loadRandomSongs(collection) {
